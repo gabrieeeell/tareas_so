@@ -1,50 +1,86 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-#include "kernel/fs.h" // Este es el archivo que tiene la definicion de dirent, cosa que yo solo tenga que referenciarla
-#include "kernel/fcntl.h" // Para poder abrir el archivo con read only (O_RDONLY)
+#include "kernel/fs.h" // este es el archivo que tiene la definicion de dirent, cosa que yo solo tenga que referenciarla
+#include "kernel/fcntl.h" // para poder abrir el archivo con read only (o_rdonly)
 
 struct dirent
   archivo_actual; // deberia ser un puntero al archivo que este leyendo en este momento
 
-int
-main(int argc, char *argv[])
+// Este struct lo necesito para guardar la informacion de que tipo es cada archivo
+struct stat st;
+
+//hay que asegurarse que el buffer que se ocupe para pegar las cadenas tenga suficiente espacio para ambas
+char *
+concatenar_cadenas(char *dest, const char *src, int dest_size)
 {
-  // Estoy asumiendo que se usa la ruta relativa
-  if (argc < 3) {
-    printf("find ./ruta_relativa archivo_a_buscar\n");
-    exit(1);
+  int i = 0;
+  int j = 0;
+
+  // buscar el final de la cadena dest
+  while (dest[i] != '\0' && i < dest_size - 1) {
+    i++;
   }
 
-  // argv[0] es el nombre del propio ejecutable
-  // argv[1] es el primer argumento real que pasas en la terminal
+  // copiar src al final de dest
+  while (src[j] != '\0' && i < dest_size - 1) {
+    dest[i] = src[j];
+    i++;
+    j++;
+  }
 
-  exit(0);
+  // asegurar el fin de cadena nulo
+  dest[i] = '\0';
+  return dest;
 }
 
 //como es solo para leer la cadena de caracteres, se usa const
-void
-buscar_archivo(const char *ruta_actual, char *archivo_a_buscar)
+// clang-format off
+void buscar_archivo(const char *ruta_actual, char *archivo_a_buscar)
 {
   int len_ruta_actual = strlen(ruta_actual);
   int len_nombre_archivo = strlen(archivo_a_buscar);
   int file_descriptor = open(ruta_actual, O_RDONLY);
 
   // read deuelve la cantidad de bytes que logro leer con exito
-  while (read(file_descriptor, &archivo_actual, sizeof(archivo_actual)) ==
-         sizeof(archivo_actual)) {
+  while (read(file_descriptor, &archivo_actual, sizeof(archivo_actual)) == sizeof(archivo_actual)) {
 
-    if (archivo_actual.name == archivo_a_buscar) {
-      char dest[]
-        // Copiar la primera cadena
-        safestrcpy(dest, s1, sizeof(dest));
+    // le sumo 2, uno para "/" y otro porciacaso para el '\0' por que no se si lo contempla
+    char dest[len_ruta_actual + len_nombre_archivo + 2]; //deberia ser inecesario poner el * al principio ya que al ser un arreglo, debe ser un puntero
+    dest[0] = '\0'; // Si declaras pero no incializas una variable en C, esta contiene basura por defecto
+    concatenar_cadenas(dest, ruta_actual, sizeof(dest));
+    concatenar_cadenas(dest, "/", sizeof(dest));
+    concatenar_cadenas(dest, archivo_actual.name, sizeof(dest));
 
-      // Buscar el final de la cadena de destino
-      int len = strlen(dest);
+    // El inum == 0, se usa en xv6 para indicar que este directorio es un espacio que el sistema dejo reservado pero que actualmente no contiene ningun archivo realmente
+    if (archivo_actual.inum == 0 || strcmp(archivo_actual.name, ".") == 0 || strcmp(archivo_actual.name, "..") == 0) continue; // igual deberia funcionar sin esta linea
 
-      // Concatenar la segunda cadena de forma segura
-      safestrcpy(dest + len, s2, sizeof(dest) - len);
+    // Supongo que al poner este condicional antes que el que ve si el archivo es una carpeta, esta función también identificara carpetas con el nombre buscado
+
+    if (strcmp(archivo_actual.name,archivo_a_buscar) == 0) { // No se pueden comparar usando == pues son direcciones de memoria
+      printf("%s\n", dest);
     }
-    printf("%s\n", archivo_actual.name);
+  
+    if (stat(dest, &st) < 0) continue; // aca se saca la informacion del archivo si es que se pudo y si no se salta al siguiente bucle
+    
+    if (st.type == T_DIR) {
+      buscar_archivo(dest, archivo_a_buscar);
+    }
   }
+}
+
+int
+main(int argc, char *argv[])
+{
+  // estoy asumiendo que se usa la ruta relativa
+  if (argc < 3) {
+    printf("find ./ruta_relativa archivo_a_buscar\n");
+    exit(1);
+  }
+
+  buscar_archivo(argv[1], argv[2]);
+  // argv[0] es el nombre del propio ejecutable
+  // argv[1] es el primer argumento real que pasas en la terminal
+
+  exit(0);
 }
