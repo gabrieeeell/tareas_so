@@ -1,0 +1,88 @@
+#include "kernel/types.h" 
+#include "kernel/stat.h" 
+#include "user/user.h"
+
+// Lo que se debe hacer recursivamente es ver si el padre le paso elementos, en caso afirmativo imprimir el primer numero y filtrar los demas hasta que no se lean mas elementos
+// en caso de que no se le haya pasado nada simplemente termina
+// se le entregará pipe modo lectura, porque el hijo solo necesita leer los datos actuales del pipe y manejarlos, el hijo no escribe sobre el pipe que le pasó el padre
+int hijos_recursivos(int pipeX){
+    int primo;
+    pid_t pid;
+    int numero_restante;
+    // Hay elementos en el pipe que comunica con el padre
+    if (read(pipeX, &primo, 4) > 0)
+    {
+        // Primer numero siempre primo
+        printf("prime %d\n", primo);
+        int pipe_hijo[2];
+        pipe(pipe_hijo);
+        // Hijo crea un hijo
+        pid = fork();
+        // Padre debe filtrar los datos restantes del pipe y enviarselos a su hijo
+        if (pid > 0)
+        {
+            // Solo se escribirá asique se debe cerrar la lectura
+            // Se recorre toda la pipe actual y se crea la pipe con el hijo donde solamente se guardan los no-multiplos del primo que se imprimió
+            close(pipe_hijo[0]);
+            while (read(pipeX, &numero_restante, 4) > 0)
+            {
+                // Si no es multiplo del primo que leyó, se envia por la pipe al hijo
+                    if (numero_restante % primo != 0)
+                    {
+                        write(pipe_hijo[1], &numero_restante, 4);
+                    }
+            }
+            close(pipe_hijo[1]);
+            close(pipeX);
+            // Para esperar a que el hijo termine de ejecutarse
+            wait(0);
+            
+        }
+        // El hijo lo que debe hacer es este mismo proceso pero usando la pipe_hijo como la pipe, por lo que se llama recursivamente a la función
+        else
+        {
+            close(pipeX);
+            close(pipe_hijo[1]);
+            // da igual si se ejecuta primero, porque recursivamente lo primero que se hace es read, como es bloqueante se queda esperando elementos y se ejecuta el pid > 0
+            hijos_recursivos(pipe_hijo[0]);
+        }
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+int main(int argc, char *argv[]) {
+    int fd[2];
+    // Se crea el pipe donde se van enviando todos los numeros
+    pipe(fd);
+    int numero_actual;
+    pid_t pid;
+    pid = fork();
+    if (pid > 0)
+    {
+        close(fd[0]);
+        for (int numero_actual = 2; numero_actual <= 35; numero_actual++)
+        {
+            
+            // Se escriben todos los numeros en el pipe
+            write(fd[1], &numero_actual, 4);
+            
+        }
+        close(fd[1]);
+        // Para que termine de ejecutarse el hijo
+        wait(0);
+    }
+    // En este punto ya se enviaron todos los numeros, entonces ahora lo que se debe hacer es comenzar a crear procesos hijo
+    // hijo
+    else
+    {
+        close(fd[1]);
+        // lectura pipe padre
+       hijos_recursivos(fd[0]);
+    }
+    return 0;
+}
+
