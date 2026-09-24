@@ -46,7 +46,6 @@ hijos_recursivos(int pipeX)
   } else {
     return 0;
   }
-  return 0;
 }
 
 int
