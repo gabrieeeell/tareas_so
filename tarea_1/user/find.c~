@@ -33,21 +33,24 @@ concatenar_cadenas(char *dest, const char *src, int dest_size)
   dest[i] = '\0';
   return dest;
 }
-
+// hola
 //como es solo para leer la cadena de caracteres, se usa const
 // clang-format off
-void buscar_archivo(const char *ruta_actual, char *archivo_a_buscar)
+void buscar_archivo(char *ruta_actual, char *archivo_a_buscar)
 {
-  int len_ruta_actual = strlen(ruta_actual);
-  int len_nombre_archivo = strlen(archivo_a_buscar);
+  // Es lo que se ocupa para iterar sobre el directorio
   int file_descriptor = open(ruta_actual, O_RDONLY);
 
   // read deuelve la cantidad de bytes que logro leer con exito
   while (read(file_descriptor, &archivo_actual, sizeof(archivo_actual)) == sizeof(archivo_actual)) {
 
-    // le sumo 2, uno para "/" y otro porciacaso para el '\0' por que no se si lo contempla
-    char dest[len_ruta_actual + len_nombre_archivo + 2]; //deberia ser inecesario poner el * al principio ya que al ser un arreglo, debe ser un puntero
+    // le sumo 2, uno para '/' y otro porciacaso para el '\0'
+    char dest[strlen(ruta_actual) + strlen(archivo_actual.name) + 2]; //deberia ser inecesario poner el * al principio ya que al ser un arreglo, debe ser un puntero
     dest[0] = '\0'; // Si declaras pero no incializas una variable en C, esta contiene basura por defecto
+    if (strlen(ruta_actual) == 2) {
+      ruta_actual[0] = '.';
+      ruta_actual[1] = '\0';
+    }
     concatenar_cadenas(dest, ruta_actual, sizeof(dest));
     concatenar_cadenas(dest, "/", sizeof(dest));
     concatenar_cadenas(dest, archivo_actual.name, sizeof(dest));
