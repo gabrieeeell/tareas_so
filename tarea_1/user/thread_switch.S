@@ -3,6 +3,7 @@
 .global switch_context
 
 #Es importante hacer estos 2 pasos seguidos en assembly, ya que sino por ejemplo guardas el contexto, luego el codigo avanza una linea y carga el contexto
+#pero luego cuando se vuelva a cargar el contexto que guardaste, el sp no habra avanzado esa linea de código y se formara un bucle
 switch_context:
 # La direccion de thread_pool[i] se pasara como argumento a a0
         sd s0, (a0)
@@ -36,3 +37,4 @@ switch_context:
         ld sp, 104(a1)
 
         ret
+

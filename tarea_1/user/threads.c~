@@ -51,12 +51,12 @@ void thread_create(void funcion(void)) {
     // A las hebras no les debo copiar el valor de los s0-s11 ni del stack inicialmente ya que estas ya que esats como que unicamente se inician para realizar
     // una función, no se les pasa el contexto de donde se llamaron originalmente o algo asi
     if (thread_pool[i].estado_thread == LIBRE) {
-      thread_pool[i].ra = (uint64)funcion; // por defecto el nombre de la funcion ya es la direccion de memoria fisica donde comienzan las instrucciones de esta
+      thread_pool[i].ra = (uint64)funcion; // por defecto el nombre de la funcion es la direccion de memoria fisica donde comienzan las instrucciones de esta
       // el stack crece hacia abajo asi que el puntero del inicio del stack debe ser al final del arreglo original
       uint64 comienzo_stack = (uint64)(thread_pool[i].stack) + (uint64)(sizeof(char)) * 4096;
       thread_pool[i].sp = comienzo_stack;
       thread_pool[i].estado_thread = LISTA_PARA_CORRER;
-      // todavia no asigno el thread_pool.ra al real registro ra asi q puedo retornar
+      // no hice cambios al registro "ra" por lo que se puede retornar con normalidad
       return;
     }
   }
