@@ -3,7 +3,7 @@
 #include "user/user.h"
 // clang-format off
 
-
+struct Thread* hebra_actual;
 #define MAX_THREADS 4
 
 // con estos estados y el proposito del ejercicio probablemente esta bien
@@ -70,33 +70,35 @@ void thread_create(void funcion(void)) {
 // Ademas esta función probablemente sirve para argumentar el paso 4.1 de la pauta
 void thread_init() {
   thread_pool[0].estado_thread = CORRIENDO;  
+  hebra_actual = &thread_pool[0];
 }
 
 // el puntero void* sirve como un puntero a cualquier tipo de dato
 extern void switch_context(void* thread_dnd_guardar_context_actual, void* thread_a_ejecutar);
 
 void thread_schedule() {
-  // Se supone que esto solo se invocara cuando haya un thread yield o algo asi, no es necesario que se ejecute siempre de fondo
-  for (int i = 0; i < MAX_THREADS; i++) {
-    // la variable para el thread actual no la puedo declarar en esta funcion pues desarparecera cuando se termine de ejecutar, entonces cuando se vuelva a ejecutar el
-    // thread 
-    // No puedo simplemente reemplazar el contenido de una hebra libre con el de la hebra inicial, ya que en esta tengo un stack que no es el original que estaba
-    // usando la hebra
-    if (thread_pool[i].estado_thread == LISTA_PARA_CORRER) {
-      for (int x = 0; x < MAX_THREADS; x++) {
-        // En este caso, dentro de un mismo proceso, solo puede estar una hebra corriendo a la vez, por lo tanto la hebra que esta en estado corriendo es
-        // al mismo tiempo la hebra que se esta ejecutando en el secuencia actual
-        if (thread_pool[x].estado_thread == CORRIENDO) {
-          thread_pool[i].estado_thread = CORRIENDO;
-          thread_pool[x].estado_thread = LISTA_PARA_CORRER;
-          switch_context(&thread_pool[x].s0,&thread_pool[i].s0);
-          return;
+    // Rescatamos quién es la hebra que acaba de llamar a yield
+    struct Thread* hebra_saliente = hebra_actual;
+
+    for (int i = 0; i < MAX_THREADS; i++) {
+        // Buscamos una hebra lista que NO sea la misma que acaba de salir
+        if (thread_pool[i].estado_thread == LISTA_PARA_CORRER && &thread_pool[i] != hebra_saliente) {
+
+            hebra_actual = &thread_pool[i];
+            hebra_actual->estado_thread = CORRIENDO;
+            switch_context(&hebra_saliente->s0, &hebra_actual->s0);
+            
+            return;
         }
-      }
-      // guardo la informacion del thread actual y paso la info del thread que quiero correr al thread actual
-      // el codigo que ponga aca no se solvera a ejecutar hasta que se vuelva al thread actual, por lo que no debe ser algo relevante
-      // como guardar el contexto de la hebra actual a la lista
     }
-  }
-    // aca seria util poner un yield() para indicarle al procesador que deberia cederse a otro proceso si es que hay alguno disponible
 }
+
+
+void thread_yield() {
+    hebra_actual->estado_thread = LISTA_PARA_CORRER;
+    thread_schedule();
+}
+
+
+
+
