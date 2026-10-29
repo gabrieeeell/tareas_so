@@ -9,5 +9,8 @@ typedef struct Thread Thread;
 // también en lo que dice la pauta hay que hacer para probar el fnucionamiento de las hebras, no hace referencia a que la función deba retornar algo, asi que
 // pondre que retorna void ()
 void thread_create(void funcion(void));
+void thread_init(void);
+void thread_schedule(void);
+void thread_yield(void);
 
 #endif

@@ -1,10 +1,23 @@
 #include "threads.h"
 #include "kernel/types.h"
 #include "user/user.h"
-// clang-format off
+//#include <stdlib.h>
 
+static unsigned long rand_state = 1;
+
+void srand(unsigned int seed) {
+    rand_state = seed;
+}
+
+int rand(void) {
+    rand_state = rand_state * 1103515245 + 12345;
+    return (unsigned int)(rand_state / 65536) % 32768;
+}
+
+// Puntero para almacenar la direccion de memoria para saber la hebra que se ejecuta en este instante, sirve para 
+// identificar que hebra de la pool es la que se está ejecutando y poder hacer 
 struct Thread* hebra_actual;
-#define MAX_THREADS 4
+#define MAX_THREADS 10
 
 // con estos estados y el proposito del ejercicio probablemente esta bien
 enum EstadoThread {
@@ -69,6 +82,7 @@ void thread_create(void funcion(void)) {
 // proceso que probablemente es despues de la declaracion de todas las hebras y stacks respectivos
 // Ademas esta función probablemente sirve para argumentar el paso 4.1 de la pauta
 void thread_init() {
+  srand(uptime());
   thread_pool[0].estado_thread = CORRIENDO;  
   hebra_actual = &thread_pool[0];
 }
@@ -76,29 +90,86 @@ void thread_init() {
 // el puntero void* sirve como un puntero a cualquier tipo de dato
 extern void switch_context(void* thread_dnd_guardar_context_actual, void* thread_a_ejecutar);
 
+
+
+
 void thread_schedule() {
-    // Rescatamos quién es la hebra que acaba de llamar a yield
-    struct Thread* hebra_saliente = hebra_actual;
+  // Se copia el puntero de la hebra que se está ejectuando en este momento en "hebra_reemplazada"
+  // esto sirve para poder guardar el contexto de la hebra que se está ejecutando actualmente
+  // entonces como la función se RISC V reemplaza los registros de las hebras, si no se clonara no se podría
+  // guardar cual fue la hebra que se estaba ejecutando antes
+    struct Thread* hebra_reemplazada = hebra_actual;
+    int largo = MAX_THREADS;
+    
+    // aritmetica de punteros para saber el indice de la hebra que se va a reemplazar
+    int id_reemplazada = hebra_actual - thread_pool;
+    int indicesFinales[largo];
+    int aux[largo - 1];
+    
+    // Se filtra
+    // En aux se guardan todos los indices diferentes al de la hebra que se va a reemplazar
+    int index_aux = 0;
+    for (int i = 0; i < largo; i++) {
+        if (i != id_reemplazada) {
+            aux[index_aux] = i;
+            index_aux++;
+        }
+    }
 
+    // Se elige indice aleatorio j.
+    // Se recorre en orden inverso y se intercambia el valor del indice final i con alguno de una posicion j
+    int hebras_disp = MAX_THREADS - 1;
+    for (int i = hebras_disp - 1; i > 0; i--) {
+        // rand() numero aleatorio, al hacer modulo da un rango entre 0 e i
+        int j = rand() % (i + 1);
+        int temp = aux[i];
+        aux[i] = aux[j];
+        aux[j] = temp;
+    }
+
+    // Se guardan todos los valores de los indices desordenados en los indices finales
+    for (int i = 0; i < hebras_disp; i++) {
+        indicesFinales[i] = aux[i];
+    }
+
+    // Se agrega el indice de la hebra reemplazada al final 
+    indicesFinales[MAX_THREADS - 1] = id_reemplazada;
+
+    // Aqui se recorren los indices random, se guarda el puntero de la hebra que se va a ejecutar, se cambia su estado
+    // y despues se hace el cambio de contexto
     for (int i = 0; i < MAX_THREADS; i++) {
-        // Buscamos una hebra lista que NO sea la misma que acaba de salir
-        if (thread_pool[i].estado_thread == LISTA_PARA_CORRER && &thread_pool[i] != hebra_saliente) {
-
-            hebra_actual = &thread_pool[i];
+        int indiceRandom = indicesFinales[i];
+        if (thread_pool[indiceRandom].estado_thread == LISTA_PARA_CORRER) {
+            hebra_actual = &thread_pool[indiceRandom];
             hebra_actual->estado_thread = CORRIENDO;
-            switch_context(&hebra_saliente->s0, &hebra_actual->s0);
-            
+            switch_context(&hebra_reemplazada->s0, &hebra_actual->s0);
             return;
         }
     }
 }
 
-
+// Simplemente cambia el estado de la hebra que lo llame y hace que otra tome la CPU
 void thread_yield() {
     hebra_actual->estado_thread = LISTA_PARA_CORRER;
     thread_schedule();
 }
 
+void thread_exit() {
+    hebra_actual->estado_thread = LIBRE;
 
+    // Ver si hay hebras activas
+    int hay_hebras_activas = 0;
+    for (int i = 1; i < MAX_THREADS; i++) {
+        if (thread_pool[i].estado_thread != LIBRE) {
+            hay_hebras_activas = 1;
+            break;
+        }
+    }
 
-
+    // Esto es para que la hebra principal pueda volver a tomar el control cuando todas las hebras
+    // terminen de ejecutar su función
+    if (!hay_hebras_activas) {
+        thread_pool[0].estado_thread = LISTA_PARA_CORRER;
+    }
+    thread_schedule();
+}
