@@ -298,30 +298,57 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
+  //El pagetable es un puntero a un diccionario basado en arbol
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
+  // PTE = Page Table Entry
   for (i = 0; i < sz; i += PGSIZE) {
+    //La función walk navega el arbol del diccionario old hacia el nodo de coordenadas i
+    //Cada nodo del arbol es una pagina
+    //El arbol se divide en 3 niveles, el ultimo nivel es una lista de casillas de 64 bits donde cada casilla corresponde
+    //a la informacion de un nodo/pagina, entre esos bits esta tanto la direccion fisica y los bits de permisos del nodo
     if ((pte = walk(old, i, 0)) == 0)
       continue; // page table entry hasn't been allocated
+    // el PTE_V es una mascara de un solo bit que indica si la pagina esta activada
     if ((*pte & PTE_V) == 0)
-      continue; // physical page hasn't been allocated
+      continue; // physical page hasn't been allocated,
+    // PTE2PA = Page Table Entry to Physical Adress, pa guarda la direccion fisica de la pagina
+
+    // Aca si la pagina es writable la vuelvo copy on write, ya que si no lo compruebo puedo volver una pagina
+    // dedicada al codigo en writable y eso es ilegal
+    if (
+      (*pte & PTE_W) !=
+      0) { //Aca no puedo hacer == 1 ya que es igual a 4 si se cumple realmente
+      *pte = *pte & ~PTE_W;
+      *pte = *pte | PTE_COW;
+    }
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if ((mem = kalloc()) == 0)
+    // aumenta en 1 las referencias a la pagina
+    if (increase_pagref(pa) != 0) {
       goto err;
-    memmove(mem, (char *)pa, PGSIZE);
-    if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-      kfree(mem);
+    }
+    // Guarda exclusivamente los bits de las flags de la entrada de la pagina
+    flags = PTE_FLAGS(*pte);
+    // Aca se va al arbol de paginas de la tabla de paginas del proceso hijo y modifica a la casilla que corresponderia
+    // al nodo
+    if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
+      // si mapppages falla, entonces no se crea nunca el nodo de la pagina en el arbol de la tabla de paginas, asi que en uvmunmap
+      // , no se considerara para restarle uno a las referencias, sin embargo, ya se le habra sumado uno a las referencias de la pagina,
+      // entonces hay hay que restar esa referencia "a mano"
+      kfree((void *)pa);
       goto err;
     }
   }
+  sfence_vma(); //Se debe borrar el cache del TLB ya que se pueden haber guardadas las paginas con permisos write alli
   return 0;
 
 err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
+  // Importante que el ultimo argumento de esta funcion este en 0, ya que sino, al fallar la creacion de un proceso
+  // hijo, se borrara el espacio en memoria principal del proceso padre
+  // Si el ultimo argumento esta en 0, unicamente se borra la tabla de paginas del proceso
+  uvmunmap(new, 0, i / PGSIZE, 0);
   return -1;
 }
 
