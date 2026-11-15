@@ -112,6 +112,7 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
+  // cuando tomo una pagina libre de la memoria y la asigno, esta empieza con 1 referencias a ella
   if (r) {
     kmem.pag_n_references[(uint64)r / PGSIZE] = 1;
     kmem.freelist = r->next;

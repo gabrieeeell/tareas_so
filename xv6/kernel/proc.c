@@ -6,6 +6,8 @@
 #include "proc.h"
 #include "defs.h"
 
+// clang-format off
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -259,16 +261,21 @@ int
 kfork(void)
 {
   int i, pid;
-  struct proc *np;
-  struct proc *p = myproc();
+  struct proc *np; // np de new process :v
+  struct proc *p = myproc(); // Guardo el PCB del proceso actual (los struct proc son los PCB)
 
+  // Aca se usa un proceso que este desocupado en la tabla de procesos, por lo que entendi los procesos ocupan un espacio estatico (hay 64 procesos que
+  // estan o desocupados o ocupados), no reservan memoria en el heap dinamicamente
   // Allocate process.
   if ((np = allocproc()) == 0) {
     return -1;
   }
 
   // Copy user memory from parent to child.
-  if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
+  // Importante que uvmcopy aca no solamente copia la tabla sino tambien toda la memoria virtual que representa la tabla
+  if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) { // Copio la tabla de paginas del proceso actual y se la pego al nuevo proceso
+    // Lo de dentro de este if es un manejo de error (si no se pudo copiar la tabla de paginas), lo que hace es abortar y hacer un rollback 
+    // de las operaciones hasta ahora
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -276,16 +283,25 @@ kfork(void)
   np->sz = p->sz;
 
   // copy saved user registers.
+  // El trapframe del PCB es un parametro que se ocupa de guardar el contexto de los registros, y ocupa una funciones en trampoline.S que son muy similares
+  // a la funciones que se usaron en assembly para cambiar el contexto del procesador en el hito 2
   *(np->trapframe) = *(p->trapframe);
 
   // Cause fork to return 0 in the child.
-  np->trapframe->a0 = 0;
+  np->trapframe->a0 = 0; // Esto es basicamente para que cuando el proceso hijo tome el control del procesador y ejecute se ejecute la
+  // funcion de trampoline.S donde se pasa el contexto del PCB al procesador, el ret final devuelva 0, lo que hara que el fork() donde se 
+  // creo el nuevo proceso devuelva 0
+  // Esto tambien funciona ya que se le pasa el return address (realmente ocupa un registro especial llamado sepc pq es una syscall, pero lo mismo idk) 
+  // del padre al hijo, entonces cuando se termine de ejecutar el "userret" en trampoline.S
+  // este hara que el proceso hijo pase justamente donde el proceso padre habia llamado a fork()
 
   // increment reference counts on open file descriptors.
+  // mas cosas para dejar el PCB del proceso hijo como deberia
   for (i = 0; i < NOFILE; i++)
     if (p->ofile[i])
-      np->ofile[i] = filedup(p->ofile[i]);
-  np->cwd = idup(p->cwd);
+      np->ofile[i] = filedup(p->ofile[i]); // filedup aumenta en 1 el contador de referencias a ese archivo, cuando ese contador llega a 0, el archivo
+  // se libera de la RAM
+  np->cwd = idup(p->cwd); // Es como en que directorio se invoco el proceso
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 

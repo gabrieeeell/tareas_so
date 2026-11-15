@@ -3,7 +3,7 @@
         # the kernel, and returns from kernel to user.
         #
         # the kernel maps the page holding this code
-        # at the same virtual address (TRAMPOLINE)
+        # at the same virtual address (trampoline)
         # in user and kernel space so that it continues
         # to work when it switches page tables.
         # kernel.ld causes this code to start at 
@@ -28,15 +28,15 @@ uservec:
         #
 
         # save user a0 in sscratch so
-        # a0 can be used to get at TRAPFRAME.
+        # a0 can be used to get at trapframe.
         csrw sscratch, a0
 
         # each process has a separate p->trapframe memory area,
         # but it's mapped to the same virtual address
-        # (TRAPFRAME) in every process's user page table.
-        li a0, TRAPFRAME
+        # (trapframe) in every process's user page table.
+        li a0, trapframe
         
-        # save the user registers in TRAPFRAME
+        # save the user registers in trapframe
         sd ra, 40(a0)
         sd sp, 48(a0)
         sd gp, 56(a0)
@@ -91,7 +91,7 @@ uservec:
         # install the kernel page table.
         csrw satp, t1
 
-        # flush now-stale user entries from the TLB.
+        # flush now-stale user entries from the tlb.
         sfence.vma zero, zero
 
         # call usertrap()
@@ -111,9 +111,9 @@ userret:
         csrw satp, a0
         sfence.vma zero, zero
 
-        li a0, TRAPFRAME
+        li a0, trapframe
 
-        # restore all but a0 from TRAPFRAME
+        # restore all but a0 from trapframe
         ld ra, 40(a0)
         ld sp, 48(a0)
         ld gp, 56(a0)
